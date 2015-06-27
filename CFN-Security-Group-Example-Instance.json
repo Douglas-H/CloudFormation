@@ -1,0 +1,50 @@
+{
+
+"Parameters":{
+ "InstanceTypeParameter" : {
+    "Type" : "String",
+    "Default" : "t2.micro",
+    "AllowedValues" : [ "t1.micro", "m1.small", "m1.large", "t2.micro" ],
+    "Description" : "Enter t1.micro, m1.small, or m1.large. Default is t1.micro."
+  },
+   "ImageParameter" : {
+    "Type" : "AWS::EC2::Image::Id",
+    "Description" : "Enter the AMI to use for the instance, Defaulting to Amazon Linux HVM in us-west-2",
+    "Default" : "ami-e7527ed7"
+  },
+
+   "SubnetParameter" : {
+    "Description" : "Subnet",
+    "Type" : "AWS::EC2::Subnet::Id"
+  },
+
+   "SSHKeyPairParameter" : {
+    "Description" : "SSH Key Pair",
+    "Type" : "AWS::EC2::KeyPair::KeyName"
+  },
+  "SecurityGrouppId" : {
+    "Description" : "Select your Sec. Grps.",
+    "Type" : "List<AWS::EC2::SecurityGroup::Id>"
+  }
+
+},
+
+"Resources":
+
+{
+
+"ExampleInstance" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" :{
+                "ImageId" : {"Ref":"ImageParameter"},
+                "InstanceType" :{"Ref":"InstanceTypeParameter"},
+                "KeyName" : {"Ref":"SSHKeyPairParameter"},
+                "SecurityGroupIds"	: { "Ref" : "SecurityGrouppId"  },
+                "SubnetId" : {"Ref":"SubnetParameter"}
+            }
+}
+
+
+}
+
+}

@@ -1,0 +1,146 @@
+{
+    "Parameters": {
+
+      "InstanceTypeParameter" : {
+         "Type" : "String",
+         "Default" : "t2.micro",
+         "AllowedValues" : [ "t1.micro", "m1.small", "m1.large", "t2.micro" ],
+         "Description" : "Enter t1.micro, m1.small, or m1.large. Default is t1.micro."
+      },
+
+      "ImageParameter" : {
+         "Type" : "AWS::EC2::Image::Id",
+         "Description" : "Enter the AMI to use for the instance, Defaulting to Amazon Linux HVM in us-west-2",
+         "Default" : "ami-e7527ed7"
+      },
+
+      "SubnetParameter": {
+          "Description": "Subnet",
+          "Type": "AWS::EC2::Subnet::Id"
+      },
+
+      "SSHKeyPairParameter": {
+          "Description": "SSH Key Pair",
+          "Type": "AWS::EC2::KeyPair::KeyName"
+      }
+    },
+    "Resources": {
+      "AWSRootVolumeTagsRole": {
+           "Type": "AWS::IAM::Role",
+           "Properties": {
+              "AssumeRolePolicyDocument": {
+                 "Version" : "2012-10-17",
+                 "Statement": [ {
+                    "Effect": "Allow",
+                    "Principal": {
+                       "Service": [ "ec2.amazonaws.com" ]
+                    },
+                    "Action": [ "sts:AssumeRole" ]
+                 } ]
+              },
+              "Path": "/",
+              "Policies": [
+                {
+                  "PolicyName": "EC2DescribeVolumeAndCreateTags",
+                  "PolicyDocument": {
+                     "Version" : "2012-10-17",
+                     "Statement": [
+                       {
+                          "Effect": "Allow",
+                          "Action": [
+                            "ec2:CreateTags",
+                            "ec2:Describe*"
+                          ],
+                         "Resource": "*"
+                       }
+                     ]
+                   }
+                }
+                ]
+             }
+          },
+          "EC2TagsInstanceProfile": {
+             "Type": "AWS::IAM::InstanceProfile",
+             "Properties": {
+                "Path": "/",
+                "Roles": [ {
+                   "Ref": "AWSRootVolumeTagsRole"
+                } ]
+             }
+          },
+        "ExampleInstance": {
+
+            "Type": "AWS::EC2::Instance",
+
+            "Properties": {
+                "ImageId": {
+                    "Ref": "ImageParameter"
+                },
+
+                "InstanceType": {
+                    "Ref": "InstanceTypeParameter"
+                },
+
+                "KeyName": {
+                    "Ref": "SSHKeyPairParameter"
+                },
+
+                "SubnetId": {
+                    "Ref": "SubnetParameter"
+                },
+
+                "IamInstanceProfile": {
+                   "Ref": "EC2TagsInstanceProfile"
+                },
+
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "InstanceID=$(curl -q 169.254.169.254/latest/meta-data/instance-id) ",
+                                "\n",
+                                "VolumeID=$(aws ec2 describe-volumes --region us-west-2 --filters Name=attachment.instance-id,Values=$InstanceID --query 'Volumes[?State==`in-use`].VolumeId' --output text |cut -f1 )",
+                                "\n",
+                                "aws ec2 create-tags --resources $VolumeID --tags Key=TagTest01,Value=IfYouSeeItThenItWorked",
+                                " --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+
+
+            }
+        },
+        "MountPoint" : {
+          "Type" : "AWS::EC2::VolumeAttachment",
+          "Properties" : {
+            "InstanceId" : { "Ref" : "ExampleInstance" },
+            "VolumeId"  : { "Ref" : "NewVolume" },
+            "Device" : "/dev/xvdb"
+          }
+        },
+
+
+        "NewVolume": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+               "Size" : "100",
+               "VolumeType" : "gp2",
+               "AvailabilityZone" : { "Fn::GetAtt" : [ "ExampleInstance" , "AvailabilityZone" ] },
+               "Tags": [
+                    {
+                        "Key": "TagTest02",
+                        "Value": "IfYouSeeThisTheTagWorked"
+                    }
+                ]
+            }
+        }
+
+    }
+}

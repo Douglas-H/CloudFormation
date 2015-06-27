@@ -1,0 +1,145 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation Template for ECS Docker under ElasticBeanstalk: Configure and launch the AWS Elastic Beanstalk application. **WARNING** This template creates one or more Amazon EC2 instances. You will be billed for the AWS resources used if you create a stack from this template.",
+
+  "Parameters" : {
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the AWS Elastic Beanstalk instance",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "InstanceTypeParameter" : {
+       "Type" : "String",
+       "Default" : "t2.micro",
+       "AllowedValues" : ["t2.micro", "t1.micro", "m1.small", "m1.large"],
+       "Description" : "Enter t2.micro, t1.micro, m1.small, or m1.large. Default is t2.micro."
+     }
+  },
+
+  "Resources" : {
+    "AWSElasticBeanstalkMultiECSContainerRole": {
+         "Type": "AWS::IAM::Role",
+         "Properties": {
+            "AssumeRolePolicyDocument": {
+               "Version" : "2012-10-17",
+               "Statement": [ {
+                  "Effect": "Allow",
+                  "Principal": {
+                     "Service": [ "ec2.amazonaws.com" ]
+                  },
+                  "Action": [ "sts:AssumeRole" ]
+               } ]
+            },
+            "Path": "/",
+            "Policies": [
+              {
+                "PolicyName": "BeanstalkECSAccess",
+                "PolicyDocument": {
+                   "Version" : "2012-10-17",
+                   "Statement": [
+                     {
+                        "Effect": "Allow",
+                        "Action": [
+                           "ecs:StartTask",
+                           "ecs:StopTask",
+                           "ecs:RegisterContainerInstance",
+                           "ecs:DeregisterContainerInstance",
+                           "ecs:DiscoverPollEndpoint",
+                           "ecs:Submit*",
+                           "ecs:Poll"
+                        ],
+                       "Resource": "*"
+                     },
+                     {
+                       "Effect": "Allow",
+                       "Action": "s3:PutObject",
+                       "Resource": "arn:aws:s3:::elasticbeanstalk-*/resources/environments/logs/*"
+                     }
+                   ]
+                 }
+              },
+              {
+                "PolicyName": "Allow-My-S3-Bucket",
+                "PolicyDocument": {
+                   "Version" : "2012-10-17",
+                   "Statement": [
+                     {
+                       "Effect": "Allow",
+                       "Action": "s3:*",
+                       "Resource": [
+                         "arn:aws:s3:::cfn-beanstalk-application-*",
+                         "arn:aws:s3:::cfn-beanstalk-application-*/*"
+                         ]
+                     }
+                   ]
+                 }
+              }
+            ]
+         }
+      },
+      "BeanstalkInstanceProfile": {
+         "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [ {
+               "Ref": "AWSElasticBeanstalkMultiECSContainerRole"
+            } ]
+         }
+      },
+
+    "ECSApplication" : {
+      "Type" : "AWS::ElasticBeanstalk::Application",
+      "Properties" : {
+        "Description" : "AWS Elastic Beanstalk Application",
+        "ApplicationVersions" : [{
+          "VersionLabel" : "Initial Version",
+          "Description" : "Version 1.0",
+          "SourceBundle" : {
+            "S3Bucket" : { "Fn::Join" : ["-", ["cfn-beanstalk-application", { "Ref" : "AWS::Region" }]]},
+            "S3Key" : "ecs-sample.zip"
+          }
+        }],
+        "ConfigurationTemplates" : [{
+          "TemplateName" : "ECS-Application",
+          "Description" : "ECS Application Version 1.0 - with SSH access",
+          "SolutionStackName" : "64bit Amazon Linux 2015.03 v1.4.3 running Multi-container Docker 1.6.2 (Generic)",
+          "OptionSettings" : [
+            {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "EC2KeyName",
+            "Value" : { "Ref" : "KeyName" }
+            },
+            {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "InstanceType",
+            "Value" : { "Ref" : "InstanceTypeParameter" }
+          },
+          {
+          "Namespace" : "aws:autoscaling:launchconfiguration",
+          "OptionName" : "IamInstanceProfile",
+          "Value" : { "Ref" : "BeanstalkInstanceProfile" }
+          }
+         ]
+        }]
+      }
+    },
+
+    "ECSEnvironment" : {
+      "Type" : "AWS::ElasticBeanstalk::Environment",
+      "Properties" : {
+        "ApplicationName" : { "Ref" : "ECSApplication" },
+         "Description" :  "AWS Elastic Beanstalk Environment running ECS  Application",
+         "TemplateName" : "ECS-Application",
+         "VersionLabel" : "Initial Version"
+      }
+    }
+
+  },
+  "Outputs" : {
+    "URL" : {
+      "Description" : "URL of the AWS Elastic Beanstalk Environment",
+      "Value" : { "Fn::GetAtt" : ["ECSEnvironment", "EndpointURL"] }
+    }
+  }
+
+}
